@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +11,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Search, Edit, Trash2, Users, Phone, MapPin, Calendar, User } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Users, Phone, MapPin, Calendar, User, ShoppingCart } from 'lucide-react';
 import { toast } from 'sonner';
 import { MobileCard, MobileCardHeader, MobileCardRow } from '@/components/ui/mobile-card';
 import { ClienteProfile } from '@/components/ClienteProfile';
 import type { Cliente } from '@/types';
 
 export default function Clientes() {
+  const navigate = useNavigate();
   const { clientes, addCliente, updateCliente, deleteCliente } = useStore();
   const [search, setSearch] = useState('');
   const [perfilCliente, setPerfilCliente] = useState<Cliente | null>(null);
@@ -36,7 +38,7 @@ export default function Clientes() {
       (c.telefono || '').includes(search)
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.nombre || !formData.apellido) {
@@ -48,11 +50,16 @@ export default function Clientes() {
       updateCliente(editingId, formData);
       toast.success('Cliente actualizado');
     } else {
-      addCliente({
+      const nuevoCliente = await addCliente({
         ...formData,
         fechaAlta: new Date().toISOString().split('T')[0],
       });
-      toast.success('Cliente creado');
+      toast.success('Cliente creado', {
+        action: {
+          label: 'Ir a vender',
+          onClick: () => navigate('/ventas', { state: { clienteId: nuevoCliente.id } }),
+        },
+      });
     }
 
     resetForm();
@@ -229,6 +236,13 @@ export default function Clientes() {
                 >
                   <User className="w-5 h-5 mr-2" />
                   Ver Perfil
+                </Button>
+                <Button
+                  onClick={() => navigate('/ventas', { state: { clienteId: cliente.id } })}
+                  className="w-full h-11 text-base"
+                >
+                  <ShoppingCart className="w-5 h-5 mr-2" />
+                  Nueva Venta
                 </Button>
               </div>
             </MobileCard>

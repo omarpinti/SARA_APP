@@ -1,22 +1,24 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Cliente, Pedido, Venta, Gasto, MovimientoCaja, CierreCaja, VentaSheets } from '@/types';
+import { Cliente, Pedido, Venta, Gasto, MovimientoCaja, CierreCaja, VentaSheets, Producto } from '@/types';
 import {
-  clientesIniciales,
-  pedidosIniciales,
   ventasIniciales,
   gastosIniciales,
   movimientosIniciales,
   cierresIniciales,
-  productos,
+  productos as productosMock,
   promociones,
 } from '@/data/mockData';
 import * as sheetsApi from '@/lib/api/googleSheets';
+import * as clientesApi from '@/lib/api/clientes';
+import * as pedidosApi from '@/lib/api/pedidos';
+import * as productosApi from '@/lib/api/productos';
 
 interface AppState {
   // Data
   clientes: Cliente[];
   pedidos: Pedido[];
+  productos: Producto[];
   ventas: Venta[];
   gastos: Gasto[];
   movimientos: MovimientoCaja[];
@@ -31,15 +33,20 @@ interface AppState {
   syncFromSheets: () => Promise<void>;
   setOnlineMode: (online: boolean) => void;
 
+  // Actions - Carga inicial desde Supabase
+  fetchClientes: () => Promise<void>;
+  fetchPedidos: () => Promise<void>;
+  fetchProductos: () => Promise<void>;
+
   // Actions - Clientes
-  addCliente: (cliente: Omit<Cliente, 'id' | 'numero'>) => void;
-  updateCliente: (id: string, cliente: Partial<Cliente>) => void;
-  deleteCliente: (id: string) => void;
+  addCliente: (cliente: Omit<Cliente, 'id' | 'numero'>) => Promise<Cliente>;
+  updateCliente: (id: string, cliente: Partial<Cliente>) => Promise<void>;
+  deleteCliente: (id: string) => Promise<void>;
 
   // Actions - Pedidos
-  addPedido: (pedido: Omit<Pedido, 'id'>) => void;
-  updatePedido: (id: string, pedido: Partial<Pedido>) => void;
-  deletePedido: (id: string) => void;
+  addPedido: (pedido: Omit<Pedido, 'id'>) => Promise<void>;
+  updatePedido: (id: string, pedido: Partial<Pedido>) => Promise<void>;
+  deletePedido: (id: string) => Promise<void>;
   convertirPedidoAVenta: (pedidoId: string, ventaData: Omit<Venta, 'id' | 'pedidoId'>) => void;
 
   // Actions - Ventas
@@ -73,8 +80,9 @@ const generateId = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9
 export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
-      clientes: clientesIniciales,
-      pedidos: pedidosIniciales,
+      clientes: [],
+      pedidos: [],
+      productos: [],
       ventas: ventasIniciales,
       gastos: gastosIniciales,
       movimientos: movimientosIniciales,
@@ -96,7 +104,7 @@ export const useStore = create<AppState>()(
           }
 
           // Map ventas from Sheets (human-readable) back to Venta[] using IDs.
-          const clientesData = data.clientes.length > 0 ? data.clientes : get().clientes;
+          const clientesData = get().clientes;
           const norm = (s: any) => String(s ?? '').trim().toLowerCase();
           const ventasMapped: Venta[] = (data.ventas as any[])
             .filter((v: any) => v.id && (v.nombre || v.apellido))
@@ -104,7 +112,7 @@ export const useStore = create<AppState>()(
               const cliente = clientesData.find(
                 (c) => norm(c.nombre) === norm(v.nombre) && norm(c.apellido) === norm(v.apellido)
               );
-              const producto = productos.find((p) => norm(p.nombre) === norm(v.producto));
+              const producto = productosMock.find((p) => norm(p.nombre) === norm(v.producto));
               const promocion = v.promocion
                 ? promociones.find((p) => norm(p.nombre) === norm(v.promocion))
                 : undefined;
@@ -124,10 +132,8 @@ export const useStore = create<AppState>()(
               } as Venta;
             });
 
-          if (data.clientes.length > 0 || data.pedidos.length > 0 || ventasMapped.length > 0) {
+          if (ventasMapped.length > 0 || data.gastos.length > 0) {
             set({
-              clientes: clientesData,
-              pedidos: data.pedidos.length > 0 ? data.pedidos : get().pedidos,
               ventas: ventasMapped.length > 0 ? ventasMapped : get().ventas,
               gastos: data.gastos.length > 0 ? data.gastos : get().gastos,
               movimientos: data.movimientosCaja.length > 0 ? data.movimientosCaja : get().movimientos,
@@ -152,62 +158,65 @@ export const useStore = create<AppState>()(
 
       setOnlineMode: (online) => set({ isOnline: online }),
 
-      // Clientes
-      addCliente: async (clienteData) => {
-        const maxNumero = Math.max(0, ...get().clientes.map((c) => c.numero));
-        const cliente: Cliente = {
-          ...clienteData,
-          id: generateId(),
-          numero: maxNumero + 1,
-        };
-        set((state) => ({ clientes: [...state.clientes, cliente] }));
-
-        // Always sync to Google Sheets
-        sheetsApi.addCliente(cliente).catch(console.error);
+      // Carga inicial desde Supabase
+      fetchClientes: async () => {
+        const clientes = await clientesApi.fetchClientes();
+        set({ clientes });
       },
 
-      updateCliente: (id, clienteData) => {
+      fetchPedidos: async () => {
+        const pedidos = await pedidosApi.fetchPedidos();
+        set({ pedidos });
+      },
+
+      fetchProductos: async () => {
+        const productos = await productosApi.fetchProductos();
+        set({ productos });
+      },
+
+      // Clientes
+      addCliente: async (clienteData) => {
+        const cliente = await clientesApi.createCliente(clienteData);
+        set((state) => ({ clientes: [...state.clientes, cliente].sort((a, b) => a.numero - b.numero) }));
+        return cliente;
+      },
+
+      updateCliente: async (id, clienteData) => {
+        await clientesApi.updateCliente(id, clienteData);
         set((state) => ({
           clientes: state.clientes.map((c) =>
             c.id === id ? { ...c, ...clienteData } : c
           ),
         }));
-
-        sheetsApi.updateCliente(id, clienteData).catch(console.error);
       },
 
-      deleteCliente: (id) => {
+      deleteCliente: async (id) => {
+        await clientesApi.deleteCliente(id);
         set((state) => ({
           clientes: state.clientes.filter((c) => c.id !== id),
         }));
-
-        sheetsApi.deleteCliente(id).catch(console.error);
       },
 
       // Pedidos
-      addPedido: (pedidoData) => {
-        const pedido: Pedido = { ...pedidoData, id: generateId() };
-        set((state) => ({ pedidos: [...state.pedidos, pedido] }));
-
-        sheetsApi.addPedido(pedido).catch(console.error);
+      addPedido: async (pedidoData) => {
+        const pedido = await pedidosApi.createPedido(pedidoData);
+        set((state) => ({ pedidos: [pedido, ...state.pedidos] }));
       },
 
-      updatePedido: (id, pedidoData) => {
+      updatePedido: async (id, pedidoData) => {
+        await pedidosApi.updatePedido(id, pedidoData);
         set((state) => ({
           pedidos: state.pedidos.map((p) =>
             p.id === id ? { ...p, ...pedidoData } : p
           ),
         }));
-
-        sheetsApi.updatePedido(id, pedidoData).catch(console.error);
       },
 
-      deletePedido: (id) => {
+      deletePedido: async (id) => {
+        await pedidosApi.deletePedido(id);
         set((state) => ({
           pedidos: state.pedidos.filter((p) => p.id !== id),
         }));
-
-        sheetsApi.deletePedido(id).catch(console.error);
       },
 
       convertirPedidoAVenta: (pedidoId, ventaData) => {
@@ -240,7 +249,7 @@ export const useStore = create<AppState>()(
         }));
 
         sheetsApi.addVenta(venta).catch(console.error);
-        sheetsApi.updatePedido(pedidoId, { estado: 'entregado' }).catch(console.error);
+        pedidosApi.updatePedido(pedidoId, { estado: 'entregado' }).catch(console.error);
         if (movimiento) {
           sheetsApi.addMovimientoCaja(movimiento).catch(console.error);
         }
@@ -271,7 +280,7 @@ export const useStore = create<AppState>()(
 
         // Convert to human-readable format for Google Sheets
         const cliente = get().clientes.find(c => c.id === venta.clienteId);
-        const producto = productos.find(p => p.id === venta.productoId);
+        const producto = productosMock.find(p => p.id === venta.productoId);
         const promocion = venta.promocionId ? promociones.find(p => p.id === venta.promocionId) : null;
 
         const ventaSheets: VentaSheets = {
@@ -307,7 +316,7 @@ export const useStore = create<AppState>()(
         const merged = get().ventas.find((v) => v.id === id);
         if (!merged) return;
         const cliente = get().clientes.find((c) => c.id === merged.clienteId);
-        const producto = productos.find((p) => p.id === merged.productoId);
+        const producto = productosMock.find((p) => p.id === merged.productoId);
         const promocion = merged.promocionId ? promociones.find((p) => p.id === merged.promocionId) : null;
 
         const sheetsPayload: Partial<VentaSheets> = {
@@ -535,6 +544,12 @@ export const useStore = create<AppState>()(
     }),
     {
       name: 'sara-app-storage',
+      partialize: (state) => ({
+        ventas: state.ventas,
+        gastos: state.gastos,
+        movimientos: state.movimientos,
+        cierres: state.cierres,
+      }),
     }
   )
 );

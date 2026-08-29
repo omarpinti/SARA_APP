@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,6 +65,19 @@ export default function Ventas() {
   const cajaCerrada = isCajaCerrada(hoy);
 
   const [formData, setFormData] = useState({ ...emptyForm });
+
+  // Si llegamos desde "Nueva Venta" en Clientes (con un cliente ya elegido),
+  // lo precargamos y abrimos el formulario. No afecta el uso normal de esta pantalla.
+  const location = useLocation();
+  const clienteIdAplicado = useRef(false);
+  useEffect(() => {
+    const clienteId = (location.state as { clienteId?: string } | null)?.clienteId;
+    if (clienteId && !clienteIdAplicado.current) {
+      clienteIdAplicado.current = true;
+      setFormData((prev) => ({ ...prev, clienteId }));
+      setIsOpen(true);
+    }
+  }, [location.state]);
 
   const filteredVentas = ventas
     .filter((v) => {

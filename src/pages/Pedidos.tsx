@@ -20,12 +20,11 @@ import {
 } from '@/components/ui/select';
 import { Plus, Search, ClipboardList, ShoppingCart, Trash2, Package } from 'lucide-react';
 import { toast } from 'sonner';
-import { productos } from '@/data/mockData';
 import { PedidoDetalle, EstadoPedido } from '@/types';
 import { MobileCard, MobileCardHeader, MobileCardRow } from '@/components/ui/mobile-card';
 
 export default function Pedidos() {
-  const { clientes, pedidos, addPedido, updatePedido, deletePedido, convertirPedidoAVenta } = useStore();
+  const { clientes, pedidos, productos, addPedido, updatePedido, deletePedido, convertirPedidoAVenta } = useStore();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [isConvertOpen, setIsConvertOpen] = useState(false);
@@ -54,6 +53,10 @@ export default function Pedidos() {
   });
 
   const addDetalle = () => {
+    if (productos.length === 0) {
+      toast.error('Todavía no hay productos cargados');
+      return;
+    }
     setFormData({
       ...formData,
       detalles: [...formData.detalles, { productoId: productos[0].id, cantidad: 1 }],
@@ -71,6 +74,38 @@ export default function Pedidos() {
     const newDetalles = [...formData.detalles];
     newDetalles[index] = { ...newDetalles[index], [field]: value };
     setFormData({ ...formData, detalles: newDetalles });
+  };
+
+  const TIPO_LABELS: Record<string, string> = {
+    bidon_6: '6 Litros',
+    bidon_10: '10 Litros',
+    bidon_20: '20 Litros',
+    pack: 'Pack',
+  };
+
+  const FORMATO_LABELS: Record<string, string> = {
+    pico: 'Pico / Canilla',
+    dispenser: 'Dispenser',
+  };
+
+  const tamanosDisponibles = Array.from(new Set(productos.map((p) => p.tipo)));
+  const formatosDisponibles = Array.from(
+    new Set(productos.map((p) => p.formato).filter(Boolean))
+  ) as string[];
+
+  const getProducto = (id: string) => productos.find((p) => p.id === id);
+
+  const updateDetalleDimension = (index: number, dimension: 'tipo' | 'formato', value: string) => {
+    const actual = getProducto(formData.detalles[index]?.productoId);
+    const tipo = dimension === 'tipo' ? value : actual?.tipo;
+    const formato = dimension === 'formato' ? value : actual?.formato;
+
+    const match = productos.find((p) => p.tipo === tipo && p.formato === formato);
+    if (match) {
+      updateDetalle(index, 'productoId', match.id);
+    } else {
+      toast.error('Esa combinación de tamaño y formato no existe');
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -213,33 +248,58 @@ export default function Pedidos() {
                   </p>
                 )}
                 <div className="space-y-3">
-                  {formData.detalles.map((det, i) => (
-                    <div key={i} className="flex flex-col gap-2 p-3 bg-muted/30 rounded-lg">
-                      <Select value={det.productoId} onValueChange={(v) => updateDetalle(i, 'productoId', v)}>
-                        <SelectTrigger className="h-12 text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {productos.map((p) => (
-                            <SelectItem key={p.id} value={p.id} className="text-base py-3">{p.nombre}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex gap-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={det.cantidad}
-                          onChange={(e) => updateDetalle(i, 'cantidad', parseInt(e.target.value) || 1)}
-                          className="h-12 text-base flex-1"
-                          placeholder="Cantidad"
-                        />
-                        <Button type="button" variant="destructive" size="icon" onClick={() => removeDetalle(i)} className="h-12 w-12 shrink-0">
-                          <Trash2 className="w-5 h-5" />
-                        </Button>
+                  {formData.detalles.map((det, i) => {
+                    const productoActual = getProducto(det.productoId);
+                    return (
+                      <div key={i} className="flex flex-col gap-2 p-3 bg-muted/30 rounded-lg">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Select
+                            value={productoActual?.tipo || ''}
+                            onValueChange={(v) => updateDetalleDimension(i, 'tipo', v)}
+                          >
+                            <SelectTrigger className="h-12 text-base">
+                              <SelectValue placeholder="Tamaño" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tamanosDisponibles.map((tipo) => (
+                                <SelectItem key={tipo} value={tipo} className="text-base py-3">
+                                  {TIPO_LABELS[tipo] || tipo}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={productoActual?.formato || ''}
+                            onValueChange={(v) => updateDetalleDimension(i, 'formato', v)}
+                          >
+                            <SelectTrigger className="h-12 text-base">
+                              <SelectValue placeholder="Formato" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {formatosDisponibles.map((formato) => (
+                                <SelectItem key={formato} value={formato} className="text-base py-3">
+                                  {FORMATO_LABELS[formato] || formato}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            min={1}
+                            value={det.cantidad}
+                            onChange={(e) => updateDetalle(i, 'cantidad', parseInt(e.target.value) || 1)}
+                            className="h-12 text-base flex-1"
+                            placeholder="Cantidad"
+                          />
+                          <Button type="button" variant="destructive" size="icon" onClick={() => removeDetalle(i)} className="h-12 w-12 shrink-0">
+                            <Trash2 className="w-5 h-5" />
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
