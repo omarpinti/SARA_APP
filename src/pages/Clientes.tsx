@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '@/store/useStore';
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +21,7 @@ import type { Cliente } from '@/types';
 export default function Clientes() {
   const navigate = useNavigate();
   const { clientes, addCliente, updateCliente, deleteCliente } = useStore();
+  const { negocioId } = useAuth();
   const [search, setSearch] = useState('');
   const [perfilCliente, setPerfilCliente] = useState<Cliente | null>(null);
   const [isOpen, setIsOpen] = useState(false);
@@ -50,10 +52,18 @@ export default function Clientes() {
       updateCliente(editingId, formData);
       toast.success('Cliente actualizado');
     } else {
-      const nuevoCliente = await addCliente({
-        ...formData,
-        fechaAlta: new Date().toISOString().split('T')[0],
-      });
+      if (!negocioId) {
+  toast.error('No se pudo identificar el negocio');
+  return;
+}
+
+const nuevoCliente = await addCliente(
+  {
+    ...formData,
+    fechaAlta: new Date().toISOString().split('T')[0],
+  },
+  negocioId
+);
       toast.success('Cliente creado', {
         action: {
           label: 'Ir a vender',

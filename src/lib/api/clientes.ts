@@ -23,10 +23,28 @@ export async function fetchClientes(): Promise<Cliente[]> {
   return (data || []).map(mapRow);
 }
 
-export async function createCliente(cliente: Omit<Cliente, 'id' | 'numero'>): Promise<Cliente> {
+export async function createCliente(
+  cliente: Omit<Cliente, 'id' | 'numero'>,
+  negocioId: string
+): Promise<Cliente> {
+
+  const { data: ultimoCliente, error: errorNumero } = await supabase
+    .from('clientes')
+    .select('numero')
+    .eq('negocio_id', negocioId)
+    .order('numero', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (errorNumero) throw errorNumero;
+
+  const nuevoNumero = (ultimoCliente?.numero ?? 0) + 1;
+
   const { data, error } = await supabase
     .from('clientes')
     .insert({
+      negocio_id: negocioId,
+      numero: nuevoNumero,
       nombre: cliente.nombre,
       apellido: cliente.apellido,
       telefono: cliente.telefono || null,
@@ -37,6 +55,7 @@ export async function createCliente(cliente: Omit<Cliente, 'id' | 'numero'>): Pr
     .single();
 
   if (error) throw error;
+
   return mapRow(data);
 }
 
