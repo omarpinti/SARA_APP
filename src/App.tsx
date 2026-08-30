@@ -19,6 +19,8 @@ import Caja from "./pages/Caja";
 import CierreCaja from "./pages/CierreCaja";
 import Estadisticas from "./pages/Estadisticas";
 import NotFound from "./pages/NotFound";
+import RecuperarPassword from '@/pages/RecuperarPassword';
+import ActualizarPassword from '@/pages/ActualizarPassword';
 
 const queryClient = new QueryClient();
 
@@ -59,14 +61,23 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+
       <BrowserRouter>
         <AuthProvider>
           <Routes>
             {/* Rutas públicas */}
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/recuperar-password"
+              element={<RecuperarPassword />}
+            />
+            <Route
+              path="/actualizar-password"
+              element={<ActualizarPassword />}
+            />
             <Route path="/registro" element={<Register />} />
 
-            {/* Rutas protegidas: requieren estar logueado */}
+            {/* Rutas protegidas */}
             <Route
               path="/*"
               element={

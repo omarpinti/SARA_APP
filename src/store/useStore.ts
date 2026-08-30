@@ -14,6 +14,7 @@ import * as clientesApi from '@/lib/api/clientes';
 import * as pedidosApi from '@/lib/api/pedidos';
 import * as productosApi from '@/lib/api/productos';
 
+
 interface AppState {
   // Data
   clientes: Cliente[];
@@ -50,9 +51,8 @@ interface AppState {
   convertirPedidoAVenta: (pedidoId: string, ventaData: Omit<Venta, 'id' | 'pedidoId'>) => void;
 
   // Actions - Ventas
+  
   addVenta: (venta: Omit<Venta, 'id'>) => void;
-  updateVenta: (id: string, venta: Partial<Venta>) => void;
-  deleteVenta: (id: string) => void;
 
   // Actions - Gastos
   addGasto: (gasto: Omit<Gasto, 'id'>) => void;
@@ -95,67 +95,12 @@ export const useStore = create<AppState>()(
 
       // Sync from Google Sheets
       syncFromSheets: async () => {
-        set({ isLoading: true, syncError: null });
-        try {
-          const data = await sheetsApi.syncAllData();
-          
-          if (data.errors.length > 0) {
-            console.warn('Sync warnings:', data.errors);
-          }
-
-          // Map ventas from Sheets (human-readable) back to Venta[] using IDs.
-          const clientesData = get().clientes;
-          const norm = (s: any) => String(s ?? '').trim().toLowerCase();
-          const ventasMapped: Venta[] = (data.ventas as any[])
-            .filter((v: any) => v.id && (v.nombre || v.apellido))
-            .map((v: any) => {
-              const cliente = clientesData.find(
-                (c) => norm(c.nombre) === norm(v.nombre) && norm(c.apellido) === norm(v.apellido)
-              );
-              const producto = productosMock.find((p) => norm(p.nombre) === norm(v.producto));
-              const promocion = v.promocion
-                ? promociones.find((p) => norm(p.nombre) === norm(v.promocion))
-                : undefined;
-              return {
-                id: v.id,
-                fecha: v.fecha,
-                clienteId: cliente?.id || '',
-                productoId: producto?.id || '',
-                promocionId: promocion?.id,
-                precio: Number(v.precio) || 0,
-                formaPago: v.formaPago,
-                estadoPago: v.estadoPago,
-                fechaPago: v.fechaPago || undefined,
-                entregamos: Number(v.entregamos) || 0,
-                llevamos: Number(v.llevamos) || 0,
-                observaciones: v.observaciones || '',
-              } as Venta;
-            });
-
-          if (ventasMapped.length > 0 || data.gastos.length > 0) {
-            set({
-              ventas: ventasMapped.length > 0 ? ventasMapped : get().ventas,
-              gastos: data.gastos.length > 0 ? data.gastos : get().gastos,
-              movimientos: data.movimientosCaja.length > 0 ? data.movimientosCaja : get().movimientos,
-              cierres: data.cierresCaja.length > 0 ? data.cierresCaja : get().cierres,
-              isOnline: true,
-            });
-          } else {
-            set({ isOnline: true });
-          }
-
-          set({ isLoading: false });
-        } catch (error) {
-          console.error('Sync failed:', error);
-          set({ 
-            isLoading: false, 
-            syncError: error instanceof Error ? error.message : 'Error de sincronización',
-            isOnline: false,
-          });
-        }
-      },
-
-
+  set({
+    isLoading: false,
+    syncError: null,
+    isOnline: true,
+  });
+},         
       setOnlineMode: (online) => set({ isOnline: online }),
 
       // Carga inicial desde Supabase
@@ -175,11 +120,20 @@ export const useStore = create<AppState>()(
       },
 
       // Clientes
-      addCliente: async (clienteData) => {
-        const cliente = await clientesApi.createCliente(clienteData);
-        set((state) => ({ clientes: [...state.clientes, cliente].sort((a, b) => a.numero - b.numero) }));
-        return cliente;
-      },
+  // Clientes
+        addCliente: async (clienteData, negocioId) => {
+         const cliente = await clientesApi.createCliente(clienteData, negocioId);
+
+          set((state) => ({
+           clientes: [...state.clientes, cliente].sort(
+           (a, b) => a.numero - b.numero
+           ),
+          }));
+
+            return cliente;
+          },
+
+
 
       updateCliente: async (id, clienteData) => {
         await clientesApi.updateCliente(id, clienteData);
@@ -256,55 +210,57 @@ export const useStore = create<AppState>()(
       },
 
       // Ventas
-      addVenta: (ventaData) => {
-        const venta: Venta = { ...ventaData, id: generateId() };
+     addVenta: (ventaData) => {
+  const venta: Venta = { ...ventaData, id: generateId() };
 
-        const movimiento: MovimientoCaja | null = 
-          (venta.formaPago === 'efectivo' && venta.estadoPago === 'pagado') 
-            ? {
-                id: generateId(),
-                tipo: 'ingreso',
-                monto: venta.precio,
-                fechaHora: new Date().toISOString(),
-                origen: 'venta',
-                refId: venta.id,
-              }
-            : null;
-
-        set((state) => ({
-          ventas: [...state.ventas, venta],
-          movimientos: movimiento 
-            ? [...state.movimientos, movimiento]
-            : state.movimientos,
-        }));
-
-        // Convert to human-readable format for Google Sheets
-        const cliente = get().clientes.find(c => c.id === venta.clienteId);
-        const producto = productosMock.find(p => p.id === venta.productoId);
-        const promocion = venta.promocionId ? promociones.find(p => p.id === venta.promocionId) : null;
-
-        const ventaSheets: VentaSheets = {
-          id: venta.id,
-          fecha: venta.fecha,
-          nombre: cliente?.nombre || '',
-          apellido: cliente?.apellido || '',
-          producto: producto?.nombre || '',
-          promocion: promocion?.nombre || '',
-          precio: venta.precio,
-          formaPago: venta.formaPago,
-          estadoPago: venta.estadoPago,
-          fechaPago: venta.fechaPago || '',
-          entregamos: venta.entregamos > 0 ? String(venta.entregamos) : '',
-          llevamos: venta.llevamos > 0 ? String(venta.llevamos) : '',
-          observaciones: venta.observaciones,
-        };
-
-        sheetsApi.addVentaSheets(ventaSheets).catch(console.error);
-        if (movimiento) {
-          sheetsApi.addMovimientoCaja(movimiento).catch(console.error);
+  const movimiento: MovimientoCaja | null = 
+    (venta.formaPago === 'efectivo' && venta.estadoPago === 'pagado') 
+      ? {
+          id: generateId(),
+          tipo: 'ingreso',
+          monto: venta.precio,
+          fechaHora: new Date().toISOString(),
+          origen: 'venta',
+          refId: venta.id,
         }
-      },
+      : null;
 
+  set((state) => ({
+    ventas: [...state.ventas, venta],
+    movimientos: movimiento 
+      ? [...state.movimientos, movimiento]
+      : state.movimientos,
+  }));
+
+  const cliente = get().clientes.find(c => c.id === venta.clienteId);
+  const producto = productosMock.find(p => p.id === venta.productoId);
+  const promocion = venta.promocionId
+    ? promociones.find(p => p.id === venta.promocionId)
+    : null;
+
+  const ventaSheets: VentaSheets = {
+    id: venta.id,
+    fecha: venta.fecha,
+    nombre: cliente?.nombre || '',
+    apellido: cliente?.apellido || '',
+    producto: producto?.nombre || '',
+    promocion: promocion?.nombre || '',
+    precio: venta.precio,
+    formaPago: venta.formaPago,
+    estadoPago: venta.estadoPago,
+    fechaPago: venta.fechaPago || '',
+    entregamos: venta.entregamos > 0 ? String(venta.entregamos) : '',
+    llevamos: venta.llevamos > 0 ? String(venta.llevamos) : '',
+    observaciones: venta.observaciones,
+  };
+
+  sheetsApi.addVentaSheets(ventaSheets).catch(console.error);
+
+  if (movimiento) {
+    sheetsApi.addMovimientoCaja(movimiento).catch(console.error);
+  }
+},
+  
       updateVenta: (id, ventaData) => {
         set((state) => ({
           ventas: state.ventas.map((v) =>

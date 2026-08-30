@@ -6,14 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-
-export default function Login() {
+      
+  export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
   const { signIn } = useAuth();
   const navigate = useNavigate();
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -52,16 +53,26 @@ export default function Login() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
+  <Label htmlFor="password">Contraseña</Label>
+  <Input
+    id="password"
+    type="password"
+    autoComplete="current-password"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    required
+  />
+</div>
+
+<div className="text-right">
+  <button
+    type="button"
+    onClick={() => navigate('/recuperar-password')}
+    className="text-sm text-primary hover:underline"
+  >
+    ¿Olvidaste tu contraseña?
+  </button>
+</div>
 
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ingresar'}
