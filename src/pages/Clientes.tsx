@@ -18,6 +18,7 @@ import { MobileCard, MobileCardHeader, MobileCardRow } from '@/components/ui/mob
 import { ClienteProfile } from '@/components/ClienteProfile';
 import type { Cliente } from '@/types';
 
+
 export default function Clientes() {
   const navigate = useNavigate();
   const { clientes, addCliente, updateCliente, deleteCliente } = useStore();

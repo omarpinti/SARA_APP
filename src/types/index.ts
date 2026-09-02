@@ -13,8 +13,13 @@ export interface Cliente {
 export interface Producto {
   id: string;
   nombre: string;
-  tipo: 'bidon_6' | 'bidon_10' | 'bidon_20' | 'pack';
-  formato?: 'pico' | 'dispenser';
+  tipo: string;
+  precioDefault: number;
+  activo: boolean;
+  requiereEnvase: boolean;
+  permiteRecambio: boolean;
+  descuentaStock: boolean;
+  orden: number;
 }
 
 export interface Promocion {

@@ -21,6 +21,8 @@ import Estadisticas from "./pages/Estadisticas";
 import NotFound from "./pages/NotFound";
 import RecuperarPassword from '@/pages/RecuperarPassword';
 import ActualizarPassword from '@/pages/ActualizarPassword';
+import AdministracionProductos from '@/pages/AdministracionProductos';
+import AdministracionPromociones from "./pages/AdministracionPromociones";
 
 const queryClient = new QueryClient();
 
@@ -50,7 +52,11 @@ function AuthedApp() {
         <Route path="/caja" element={<Caja />} />
         <Route path="/cierre" element={<CierreCaja />} />
         <Route path="/estadisticas" element={<Estadisticas />} />
-        <Route path="*" element={<NotFound />} />
+        <Route path="/administracion/productos" element={<AdministracionProductos />} />
+       <Route path="/administracion/promociones" element={<AdministracionPromociones />}
+/>
+
+      <Route path="*" element={<NotFound />} />
       </Routes>
     </AppLayout>
   );
