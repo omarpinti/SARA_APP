@@ -77,7 +77,7 @@ export async function registrarVentaCompleta({
     subtotal: item.subtotal,
   }));
 
-  const { error: detalleError } = await supabase
+    const { error: detalleError } = await supabase
     .from('venta_detalle')
     .insert(detalles);
 
@@ -91,8 +91,38 @@ export async function registrarVentaCompleta({
     throw detalleError;
   }
 
+  if (estadoPago === 'pagado') {
+    const { error: movimientoError } = await supabase
+      .from('movimientos_caja')
+      .insert({
+        negocio_id: negocioId,
+        tipo: 'ingreso',
+        monto: total,
+        fecha_hora: new Date(
+          `${fechaPago ?? fecha}T12:00:00`
+        ).toISOString(),
+        origen: 'venta',
+        ref_id: venta.id,
+      });
+
+    if (movimientoError) {
+      await supabase
+        .from('venta_detalle')
+        .delete()
+        .eq('venta_id', venta.id);
+
+      await supabase
+        .from('ventas')
+        .delete()
+        .eq('id', venta.id);
+
+      throw movimientoError;
+    }
+  }
+
   return venta;
 }
+
 export async function fetchVentasCompletas(negocioId: string) {
   const { data, error } = await supabase
     .from('ventas')
@@ -228,7 +258,7 @@ if (estadoPago === 'pagado') {
         negocio_id: negocioId,
         tipo: 'ingreso',
         monto: total,
-        fecha_hora: new Date().toISOString(),
+        fecha_hora: new Date(`${fechaPago ?? fecha}T12:00:00`).toISOString(),
         origen: 'venta',
         ref_id: ventaId,
       },

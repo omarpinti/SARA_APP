@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -11,16 +11,43 @@ import {
   Banknote,
   CalendarDays,
 } from 'lucide-react';
+import {
+  fetchMovimientosCajaDia,
+  fetchMovimientosCajaMes,
+} from '@/lib/api/caja';
+import { useAuth } from '@/contexts/AuthContext';
+
 
 const toKey = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
+
 export default function Caja() {
+  const { negocioId } = useAuth();
   const { ventas, gastos } = useStore();
+  const [movimientosCaja, setMovimientosCaja] = useState<any[]>([]);
+  const [movimientosMes, setMovimientosMes] = useState<any[]>([]);
   const [fechaSel, setFechaSel] = useState<Date>(() => {
-    const n = new Date();
-    return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 12, 0, 0);
-  });
+  const n = new Date();
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 12, 0, 0);
+});
+  useEffect(() => {
+  if (!negocioId) return;
+
+  fetchMovimientosCajaDia(negocioId, fechaSel)
+    .then(setMovimientosCaja)
+    .catch(console.error);
+}, [negocioId, fechaSel]);
+
+useEffect(() => {
+  if (!negocioId) return;
+
+  fetchMovimientosCajaMes(negocioId, fechaSel)
+    .then(setMovimientosMes)
+    .catch(console.error);
+}, [negocioId, fechaSel]);
+   console.log('NEGOCIO ID:', negocioId);
+   console.log('MOVIMIENTOS CAJA:', movimientosCaja);
 
   const now = fechaSel;
   const hoy = toKey(fechaSel);
@@ -29,49 +56,122 @@ export default function Caja() {
   const fechaVenta = (v: { fecha: string; fechaPago?: string }) =>
     (v.fechaPago && v.fechaPago.trim() !== '' ? v.fechaPago : v.fecha).slice(0, 10);
 
-  // ── Ventas de hoy ────────────────────────────────────────────
-  const ventasHoy = useMemo(() => ventas.filter((v) => fechaVenta(v) === hoy), [ventas, hoy]);
+  // ── Ingresos reales de Caja desde Supabase ───────────────────
+const ventasEfectivoPagadas = movimientosCaja.filter(
+  (m) =>
+    m.tipo === 'ingreso' &&
+    m.origen === 'venta' &&
+    m.forma_pago === 'efectivo'
+);
 
-  const ventasEfectivoPagadas = ventasHoy.filter(
-    (v) => v.formaPago === 'efectivo' && v.estadoPago === 'pagado'
-  );
-  const ventasTransferenciaPagadas = ventasHoy.filter(
-    (v) => v.formaPago === 'transferencia' && v.estadoPago === 'pagado'
-  );
-  const ventasCuentaCorriente = ventasHoy.filter(
-    (v) => v.formaPago === 'cuenta_corriente'
-  );
-  const ventasPendientes = ventasHoy.filter((v) => v.estadoPago === 'pendiente');
+const ventasTransferenciaPagadas = movimientosCaja.filter(
+  (m) =>
+    m.tipo === 'ingreso' &&
+    m.origen === 'venta' &&
+    m.forma_pago === 'transferencia'
+);
 
-  const totalVentasEfectivo = ventasEfectivoPagadas.reduce((s, v) => s + v.precio, 0);
-  const totalVentasTransferencia = ventasTransferenciaPagadas.reduce((s, v) => s + v.precio, 0);
-  const totalVentasCuentaCorriente = ventasCuentaCorriente.reduce((s, v) => s + v.precio, 0);
-  const totalVentasPendientes = ventasPendientes.reduce((s, v) => s + v.precio, 0);
-  const ventasPagadas = ventasHoy.filter((v) => v.estadoPago === 'pagado');
-  const totalVentasDia = ventasPagadas.reduce((s, v) => s + v.precio, 0);
+const ventasCuentaCorriente = movimientosCaja.filter(
+  (m) =>
+    m.tipo === 'ingreso' &&
+    m.origen === 'venta' &&
+    m.forma_pago === 'cuenta_corriente'
+);
 
-  // ── Gastos de hoy ────────────────────────────────────────────
-  const gastosHoy = useMemo(() => gastos.filter((g) => g.fecha.slice(0, 10) === hoy), [gastos, hoy]);
+const ventasPagadas = movimientosCaja.filter(
+  (m) => m.tipo === 'ingreso' && m.origen === 'venta'
+);
 
-  const gastosEfectivo = gastosHoy.filter((g) => g.formaPago === 'efectivo');
-  const gastosTransferencia = gastosHoy.filter((g) => g.formaPago === 'transferencia');
+const totalVentasEfectivo = ventasEfectivoPagadas.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
 
-  const totalGastosEfectivo = gastosEfectivo.reduce((s, g) => s + g.monto, 0);
-  const totalGastosTransferencia = gastosTransferencia.reduce((s, g) => s + g.monto, 0);
-  const totalGastosDia = gastosHoy.reduce((s, g) => s + g.monto, 0);
+const totalVentasTransferencia = ventasTransferenciaPagadas.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const totalVentasCuentaCorriente = ventasCuentaCorriente.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const totalVentasDia = ventasPagadas.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+// Pendientes todavía quedan temporalmente con la lógica anterior
+const ventasPendientes = ventas.filter(
+  (v) => v.fecha.slice(0, 10) === hoy && v.estadoPago === 'pendiente'
+);
+
+const totalVentasPendientes = ventasPendientes.reduce(
+  (s, v) => s + v.precio,
+  0
+);
+
+ // ── Gastos reales de Caja desde Supabase ─────────────────────
+const gastosEfectivo = movimientosCaja.filter(
+  (m) =>
+    m.tipo === 'egreso' &&
+    m.origen === 'gasto' &&
+    m.forma_pago === 'efectivo'
+);
+
+const gastosTransferencia = movimientosCaja.filter(
+  (m) =>
+    m.tipo === 'egreso' &&
+    m.origen === 'gasto' &&
+    m.forma_pago === 'transferencia'
+);
+
+const totalGastosEfectivo = gastosEfectivo.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const totalGastosTransferencia = gastosTransferencia.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const totalGastosDia = movimientosCaja
+  .filter((m) => m.tipo === 'egreso' && m.origen === 'gasto')
+  .reduce((s, m) => s + Number(m.monto), 0);
 
   // ── Netos del día ────────────────────────────────────────────
-  const netoEfectivo = totalVentasEfectivo - totalGastosEfectivo;
-  const netoTransferencia = totalVentasTransferencia - totalGastosTransferencia;
+const netoEfectivo = totalVentasEfectivo - totalGastosEfectivo;
+const netoTransferencia =
+  totalVentasTransferencia - totalGastosTransferencia;
+
+// Para mostrar detalle visual todavía conservamos los gastos del store
+const gastosHoy = useMemo(
+  () => gastos.filter((g) => g.fecha.slice(0, 10) === hoy),
+  [gastos, hoy]
+);
 
   // ── Resumen del mes ──────────────────────────────────────────
-  const mesActual = hoy.slice(0, 7); // "YYYY-MM"
-  const ventasMes = ventas.filter((v) => fechaVenta(v).startsWith(mesActual));
-  const gastosMes = gastos.filter((g) => g.fecha.startsWith(mesActual));
+ const ventasMes = movimientosMes.filter(
+  (m) => m.tipo === 'ingreso' && m.origen === 'venta'
+);
 
-  const totalVentasMes = ventasMes.reduce((s, v) => s + v.precio, 0);
-  const totalGastosMes = gastosMes.reduce((s, g) => s + g.monto, 0);
-  const netoMes = totalVentasMes - totalGastosMes;
+const gastosMes = movimientosMes.filter(
+  (m) => m.tipo === 'egreso' && m.origen === 'gasto'
+);
+
+const totalVentasMes = ventasMes.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const totalGastosMes = gastosMes.reduce(
+  (s, m) => s + Number(m.monto),
+  0
+);
+
+const netoMes = totalVentasMes - totalGastosMes;
 
   // Último día del mes
   const ultimoDiaMes = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();

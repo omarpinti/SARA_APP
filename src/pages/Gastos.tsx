@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,6 +22,8 @@ import { Plus, Search, Receipt, Trash2, CreditCard, Pencil } from 'lucide-react'
 import { toast } from 'sonner';
 import { MobileCard, MobileCardHeader, MobileCardRow } from '@/components/ui/mobile-card';
 import { DatePickerField } from '@/components/DatePickerField';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchGastos, registrarGasto } from '@/lib/api/gastos';
 
 const emptyForm = {
   fecha: new Date(),
@@ -32,6 +34,8 @@ const emptyForm = {
 };
 
 export default function Gastos() {
+  const { negocioId } = useAuth();
+  const [gastosDb, setGastosDb] = useState<any[]>([]);
   const { gastos, addGasto, updateGasto, deleteGasto, isCajaCerrada } = useStore();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -41,8 +45,15 @@ export default function Gastos() {
   const cajaCerrada = isCajaCerrada(hoy);
 
   const [formData, setFormData] = useState({ ...emptyForm });
+  useEffect(() => {
+  if (!negocioId) return;
 
-  const filteredGastos = gastos
+  fetchGastos(negocioId)
+    .then(setGastosDb)
+    .catch(console.error);
+}, [negocioId]);
+
+  const filteredGastos = gastosDb
     .filter((g) =>
       g.detalle.toLowerCase().includes(search.toLowerCase())
     )
@@ -52,47 +63,68 @@ export default function Gastos() {
       return b.id.localeCompare(a.id);
     });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    const y = formData.fecha.getFullYear();
-    const m = String(formData.fecha.getMonth() + 1).padStart(2, '0');
-    const d = String(formData.fecha.getDate()).padStart(2, '0');
-    const fechaStr = `${y}-${m}-${d}`;
+  const y = formData.fecha.getFullYear();
+  const m = String(formData.fecha.getMonth() + 1).padStart(2, '0');
+  const d = String(formData.fecha.getDate()).padStart(2, '0');
+  const fechaStr = `${y}-${m}-${d}`;
 
-    if (isCajaCerrada(fechaStr)) {
-      toast.error('La caja de ese día está cerrada');
-      return;
-    }
+  if (isCajaCerrada(fechaStr)) {
+    toast.error('La caja de ese día está cerrada');
+    return;
+  }
 
-    if (!formData.detalle) {
-      toast.error('El detalle es requerido');
-      return;
-    }
+  if (!negocioId) {
+    toast.error('No se encontró el negocio');
+    return;
+  }
 
-    if (formData.monto <= 0) {
-      toast.error('El monto debe ser mayor a 0');
-      return;
-    }
+  if (!formData.detalle) {
+    toast.error('El detalle es requerido');
+    return;
+  }
 
-    const gastoPayload = {
+  if (formData.monto <= 0) {
+    toast.error('El monto debe ser mayor a 0');
+    return;
+  }
+
+  try {
+    await registrarGasto({
+      negocioId,
       fecha: fechaStr,
+      fechaPago: fechaStr,
       detalle: formData.detalle,
       monto: formData.monto,
       formaPago: formData.formaPago,
+      estadoPago: 'pagado',
       observaciones: formData.observaciones,
-    };
+    });
 
-    if (editingId) {
-      updateGasto(editingId, gastoPayload);
-      toast.success('Gasto actualizado');
-    } else {
-      addGasto(gastoPayload);
-      toast.success('Gasto registrado');
-    }
+    const data = await fetchGastos(negocioId);
+
+    setGastosDb(
+      data.map((g: any) => ({
+        id: g.id,
+        fecha: g.fecha,
+        fechaPago: g.fecha_pago,
+        detalle: g.detalle,
+        monto: Number(g.monto),
+        formaPago: g.forma_pago,
+        estadoPago: g.estado_pago,
+        observaciones: g.observaciones || '',
+      }))
+    );
+
+    toast.success('Gasto registrado');
     resetForm();
-  };
-
+  } catch (error) {
+    console.error(error);
+    toast.error('No se pudo registrar el gasto');
+  }
+};
   const handleEdit = (id: string) => {
     const gasto = gastos.find(g => g.id === id);
     if (!gasto) return;
