@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useStore } from '@/store/useStore';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DatePickerField } from '@/components/DatePickerField';
 import {
@@ -14,6 +13,7 @@ import {
 import {
   fetchMovimientosCajaDia,
   fetchMovimientosCajaMes,
+  fetchVentasPendientesDia,
 } from '@/lib/api/caja';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -24,9 +24,9 @@ const toKey = (d: Date) =>
 
 export default function Caja() {
   const { negocioId } = useAuth();
-  const { ventas, gastos } = useStore();
   const [movimientosCaja, setMovimientosCaja] = useState<any[]>([]);
   const [movimientosMes, setMovimientosMes] = useState<any[]>([]);
+  const [ventasPendientesDia, setVentasPendientesDia] = useState<{ id: string; precio: number }[]>([]);
   const [fechaSel, setFechaSel] = useState<Date>(() => {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate(), 12, 0, 0);
@@ -44,6 +44,14 @@ useEffect(() => {
 
   fetchMovimientosCajaMes(negocioId, fechaSel)
     .then(setMovimientosMes)
+    .catch(console.error);
+}, [negocioId, fechaSel]);
+
+useEffect(() => {
+  if (!negocioId) return;
+
+  fetchVentasPendientesDia(negocioId, toKey(fechaSel))
+    .then(setVentasPendientesDia)
     .catch(console.error);
 }, [negocioId, fechaSel]);
    console.log('NEGOCIO ID:', negocioId);
@@ -102,13 +110,8 @@ const totalVentasDia = ventasPagadas.reduce(
   0
 );
 
-// Pendientes todavía quedan temporalmente con la lógica anterior
-const ventasPendientes = ventas.filter(
-  (v) => v.fecha.slice(0, 10) === hoy && v.estadoPago === 'pendiente'
-);
-
-const totalVentasPendientes = ventasPendientes.reduce(
-  (s, v) => s + v.precio,
+const totalVentasPendientes = ventasPendientesDia.reduce(
+  (s, v) => s + Number(v.precio),
   0
 );
 
@@ -145,12 +148,6 @@ const totalGastosDia = movimientosCaja
 const netoEfectivo = totalVentasEfectivo - totalGastosEfectivo;
 const netoTransferencia =
   totalVentasTransferencia - totalGastosTransferencia;
-
-// Para mostrar detalle visual todavía conservamos los gastos del store
-const gastosHoy = useMemo(
-  () => gastos.filter((g) => g.fecha.slice(0, 10) === hoy),
-  [gastos, hoy]
-);
 
   // ── Resumen del mes ──────────────────────────────────────────
  const ventasMes = movimientosMes.filter(
@@ -226,7 +223,7 @@ const netoMes = totalVentasMes - totalGastosMes;
         <StatCard
           title="Total Gastos"
           value={formatCurrency(totalGastosDia)}
-          subtitle={`${gastosHoy.length} gastos`}
+          subtitle={`${gastosEfectivo.length + gastosTransferencia.length} gastos`}
           icon={TrendingDown}
           variant="warning"
         />
@@ -293,7 +290,7 @@ const netoMes = totalVentasMes - totalGastosMes;
                 <p className="text-sm font-medium flex items-center gap-1.5">
                   <Wallet className="w-4 h-4 text-warning" /> Pendientes
                 </p>
-                <p className="text-xs text-muted-foreground">{ventasPendientes.length} venta{ventasPendientes.length !== 1 ? 's' : ''}</p>
+                <p className="text-xs text-muted-foreground">{ventasPendientesDia.length} venta{ventasPendientesDia.length !== 1 ? 's' : ''}</p>
               </div>
               <span className="text-warning font-semibold">{formatCurrency(totalVentasPendientes)}</span>
             </div>
@@ -344,21 +341,6 @@ const netoMes = totalVentasMes - totalGastosMes;
               <span className="font-display font-bold text-destructive">{formatCurrency(totalGastosDia)}</span>
             </div>
           </div>
-
-          {/* Lista de gastos del día */}
-          {gastosHoy.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border space-y-2">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Detalle</p>
-              {gastosHoy.map((g) => (
-                <div key={g.id} className="flex justify-between text-sm">
-                  <span className="text-muted-foreground truncate max-w-[60%]">{g.detalle}</span>
-                  <span className={g.formaPago === 'efectivo' ? 'text-destructive font-medium' : 'font-medium'}>
-                    {formatCurrency(g.monto)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

@@ -77,6 +77,21 @@ export async function fetchMovimientosCajaDia(
 
   return resultado;
 }
+export async function fetchVentasPendientesDia(
+  negocioId: string,
+  fechaKey: string
+) {
+  const { data, error } = await supabase
+    .from('ventas')
+    .select('id, precio')
+    .eq('negocio_id', negocioId)
+    .eq('fecha', fechaKey)
+    .eq('estado_pago', 'pendiente');
+
+  if (error) throw error;
+  return data || [];
+}
+
 export async function fetchMovimientosCajaMes(
   negocioId: string,
   fecha: Date
