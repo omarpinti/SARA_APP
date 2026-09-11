@@ -103,6 +103,7 @@ export async function registrarVentaCompleta({
         ).toISOString(),
         origen: 'venta',
         ref_id: venta.id,
+        forma_pago: formaPago,
       });
 
     if (movimientoError) {
@@ -261,6 +262,7 @@ if (estadoPago === 'pagado') {
         fecha_hora: new Date(`${fechaPago ?? fecha}T12:00:00`).toISOString(),
         origen: 'venta',
         ref_id: ventaId,
+        forma_pago: formaPago,
       },
       {
         onConflict: 'ref_id',

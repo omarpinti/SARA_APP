@@ -77,6 +77,7 @@ export async function registrarGasto(
         ).toISOString(),
         origen: 'gasto',
         ref_id: gasto.id,
+        forma_pago: formaPago,
       });
 
     if (movimientoError) {

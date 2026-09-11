@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { DatePickerField } from '@/components/DatePickerField';
 import {
@@ -12,7 +12,15 @@ import {
   Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { CierreCaja as CierreCajaType, Venta } from '@/types';
+import {
+  fetchVentasEfectivasDia,
+  fetchCierrePorFecha,
+  fetchHistorialCierres,
+  abrirCajaDia,
+  cerrarCajaDia,
+  reabrirCajaDia,
+  abrirTodasLasCajas,
+} from '@/lib/api/cierreCaja';
 
 const toISODate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -20,7 +28,7 @@ const toISODate = (d: Date) =>
 const formatCurrency = (amount: number) =>
   new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount || 0);
 
-const formatHora = (iso?: string) =>
+const formatHora = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—';
 
 const formatFechaCorta = (fecha: string) =>
@@ -30,26 +38,43 @@ const formatFechaCorta = (fecha: string) =>
     year: 'numeric',
   });
 
-// Fecha efectiva de cobro: fechaPago si existe, si no la fecha de la venta
-const fechaVenta = (v: Venta) => (v.fechaPago || v.fecha || '').slice(0, 10);
-
 export default function CierreCaja() {
-  const { ventas, cierres, abrirCajaDia, cerrarCajaDia, abrirCaja, abrirTodasLasCajas } = useStore();
+  const { negocioId } = useAuth();
   const [fechaSel, setFechaSel] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
   });
 
+  const [ventasDelDia, setVentasDelDia] = useState<any[]>([]);
+  const [cierreFecha, setCierreFecha] = useState<any>(null);
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [cargando, setCargando] = useState(false);
+
   const fechaStr = toISODate(fechaSel);
 
-  // Ventas del día (sin duplicados por id)
-  const ventasDelDia = useMemo(() => {
-    const map = new Map<string, Venta>();
-    ventas.forEach((v) => {
-      if (fechaVenta(v) === fechaStr) map.set(v.id, v);
-    });
-    return Array.from(map.values());
-  }, [ventas, fechaStr]);
+  const cargarDatos = useCallback(async () => {
+    if (!negocioId) return;
+    setCargando(true);
+    try {
+      const [ventas, cierre, hist] = await Promise.all([
+        fetchVentasEfectivasDia(negocioId, fechaStr),
+        fetchCierrePorFecha(negocioId, fechaStr),
+        fetchHistorialCierres(negocioId),
+      ]);
+      setVentasDelDia(ventas);
+      setCierreFecha(cierre);
+      setHistorial(hist);
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudieron cargar los datos de caja');
+    } finally {
+      setCargando(false);
+    }
+  }, [negocioId, fechaStr]);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   const resumen = useMemo(() => {
     let efectivo = 0;
@@ -59,12 +84,12 @@ export default function CierreCaja() {
     let totalVendido = 0;
 
     ventasDelDia.forEach((v) => {
-      const monto = v.precio || 0;
+      const monto = Number(v.precio) || 0;
       totalVendido += monto;
 
-      if (v.estadoPago === 'pagado') {
-        if (v.formaPago === 'efectivo') efectivo += monto;
-        else if (v.formaPago === 'transferencia') transferencia += monto;
+      if (v.estado_pago === 'pagado') {
+        if (v.forma_pago === 'efectivo') efectivo += monto;
+        else if (v.forma_pago === 'transferencia') transferencia += monto;
         else otros += monto;
       } else {
         pendiente += monto;
@@ -72,7 +97,7 @@ export default function CierreCaja() {
     });
 
     const totalCobrado = efectivo + transferencia + otros;
-    const pendientes = ventasDelDia.filter((v) => v.estadoPago !== 'pagado');
+    const cantidadPendientes = ventasDelDia.filter((v) => v.estado_pago !== 'pagado').length;
 
     return {
       cantidadVentas: ventasDelDia.length,
@@ -82,32 +107,38 @@ export default function CierreCaja() {
       totalPendiente: pendiente,
       totalVendido,
       totalCobrado,
-      cantidadPendientes: pendientes.length,
+      cantidadPendientes,
     };
   }, [ventasDelDia]);
 
-  const cierreFecha = cierres.find((c) => c.fecha === fechaStr);
   const estadoCaja: 'sin_abrir' | 'abierta' | 'cerrada' = !cierreFecha
     ? 'sin_abrir'
     : cierreFecha.estado === 'cerrado'
     ? 'cerrada'
     : 'abierta';
 
-  const handleAbrir = () => {
+  const handleAbrir = async () => {
+    if (!negocioId) return;
     if (estadoCaja === 'cerrada') {
       toast.error('La caja de esta fecha ya está cerrada');
       return;
     }
-    abrirCajaDia(fechaStr);
-    toast.success(`Caja del ${formatFechaCorta(fechaStr)} abierta`);
+    try {
+      await abrirCajaDia(negocioId, fechaStr);
+      toast.success(`Caja del ${formatFechaCorta(fechaStr)} abierta`);
+      cargarDatos();
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudo abrir la caja');
+    }
   };
 
-  const handleCerrar = () => {
+  const handleCerrar = async () => {
     if (estadoCaja === 'cerrada') {
       toast.error('Ya existe un cierre para esta fecha');
       return;
     }
-    if (estadoCaja === 'sin_abrir') {
+    if (estadoCaja === 'sin_abrir' || !cierreFecha) {
       toast.error('Primero tenés que abrir la caja de esta fecha');
       return;
     }
@@ -126,57 +157,69 @@ export default function CierreCaja() {
     ].join('\n');
 
     if (confirm(detalle)) {
-      cerrarCajaDia(fechaStr, {
-        cantidadVentas: resumen.cantidadVentas,
-        totalEfectivo: resumen.totalEfectivo,
-        totalTransferencia: resumen.totalTransferencia,
-        totalOtros: resumen.totalOtros,
-        totalVendido: resumen.totalVendido,
-        totalCobrado: resumen.totalCobrado,
-        totalPendiente: resumen.totalPendiente,
-      });
-      toast.success('Caja cerrada correctamente');
+      try {
+        await cerrarCajaDia(cierreFecha.id, resumen);
+        toast.success('Caja cerrada correctamente');
+        cargarDatos();
+      } catch (e) {
+        console.error(e);
+        toast.error('No se pudo cerrar la caja');
+      }
     }
   };
 
-  const handleReabrir = () => {
+  const handleReabrir = async () => {
+    if (!cierreFecha) return;
     if (confirm('¿Reabrir la caja de esta fecha? Vas a poder seguir cargando ventas.')) {
-      abrirCaja(fechaStr);
-      toast.success('Caja reabierta');
+      try {
+        await reabrirCajaDia(cierreFecha.id);
+        toast.success('Caja reabierta');
+        cargarDatos();
+      } catch (e) {
+        console.error(e);
+        toast.error('No se pudo reabrir la caja');
+      }
     }
   };
 
-  const handleAbrirTodas = () => {
-    const cerradas = cierres.filter((c) => c.estado === 'cerrado').length;
+  const handleAbrirTodas = async () => {
+    if (!negocioId) return;
+    const cerradas = historial.filter((c) => c.estado === 'cerrado').length;
     if (cerradas === 0) {
       toast.info('No hay cajas cerradas');
       return;
     }
     if (confirm(`¿Abrir todas las cajas cerradas (${cerradas})?`)) {
-      abrirTodasLasCajas();
-      toast.success('Todas las cajas fueron abiertas.');
+      try {
+        await abrirTodasLasCajas(negocioId);
+        toast.success('Todas las cajas fueron abiertas.');
+        cargarDatos();
+      } catch (e) {
+        console.error(e);
+        toast.error('No se pudieron abrir las cajas');
+      }
     }
   };
 
-  const descargarCSV = (registro?: CierreCajaType) => {
+  const descargarCSV = (registro?: any) => {
     const fila = registro
       ? {
           fecha: registro.fecha,
-          horaApertura: formatHora(registro.horaApertura),
-          horaCierre: formatHora(registro.horaCierre),
-          cantidadVentas: registro.cantidadVentas ?? 0,
-          efectivo: registro.totalEfectivo ?? 0,
-          transferencias: registro.totalTransferencia ?? 0,
-          otros: registro.totalOtros ?? 0,
-          totalVentas: registro.totalVendido ?? 0,
-          totalCobrado: registro.totalCobrado ?? 0,
-          pendiente: registro.totalPendiente ?? 0,
+          horaApertura: formatHora(registro.hora_apertura),
+          horaCierre: formatHora(registro.hora_cierre),
+          cantidadVentas: registro.cantidad_ventas ?? 0,
+          efectivo: registro.total_efectivo ?? 0,
+          transferencias: registro.total_transferencia ?? 0,
+          otros: registro.total_otros ?? 0,
+          totalVentas: registro.total_vendido ?? 0,
+          totalCobrado: registro.total_cobrado ?? 0,
+          pendiente: registro.total_pendiente ?? 0,
           estado: registro.estado === 'cerrado' ? 'Cerrada' : 'Abierta',
         }
       : {
           fecha: fechaStr,
-          horaApertura: formatHora(cierreFecha?.horaApertura),
-          horaCierre: formatHora(cierreFecha?.horaCierre),
+          horaApertura: formatHora(cierreFecha?.hora_apertura),
+          horaCierre: formatHora(cierreFecha?.hora_cierre),
           cantidadVentas: resumen.cantidadVentas,
           efectivo: resumen.totalEfectivo,
           transferencias: resumen.totalTransferencia,
@@ -216,7 +259,7 @@ export default function CierreCaja() {
       fila.estado,
     ];
 
-    const csv = '\uFEFF' + [headers.join(';'), valores.join(';')].join('\n');
+    const csv = [headers.join(','), valores.join(',')].join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -228,10 +271,6 @@ export default function CierreCaja() {
     URL.revokeObjectURL(url);
     toast.success('CSV descargado');
   };
-
-  const historial = [...cierres].sort(
-    (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-  );
 
   return (
     <div className="space-y-4 lg:space-y-6">
@@ -247,7 +286,7 @@ export default function CierreCaja() {
             })}
           </p>
         </div>
-        {cierres.some((c) => c.estado === 'cerrado') && (
+        {historial.some((c) => c.estado === 'cerrado') && (
           <Button
             onClick={handleAbrirTodas}
             variant="outline"
@@ -278,10 +317,10 @@ export default function CierreCaja() {
                 ? 'Caja Abierta'
                 : 'Caja sin abrir'}
             </h2>
-            {cierreFecha?.horaApertura && (
+            {cierreFecha?.hora_apertura && (
               <span className="ml-auto text-xs text-muted-foreground">
-                Apertura {formatHora(cierreFecha.horaApertura)}
-                {cierreFecha.horaCierre && ` · Cierre ${formatHora(cierreFecha.horaCierre)}`}
+                Apertura {formatHora(cierreFecha.hora_apertura)}
+                {cierreFecha.hora_cierre && ` · Cierre ${formatHora(cierreFecha.hora_cierre)}`}
               </span>
             )}
           </div>
@@ -348,14 +387,14 @@ export default function CierreCaja() {
 
           <div className="space-y-3">
             {estadoCaja === 'sin_abrir' && (
-              <Button onClick={handleAbrir} className="w-full h-14 text-base" size="lg">
+              <Button onClick={handleAbrir} className="w-full h-14 text-base" size="lg" disabled={cargando}>
                 <Unlock className="w-5 h-5 mr-2" />
                 ABRIR CAJA
               </Button>
             )}
 
             {estadoCaja === 'abierta' && (
-              <Button onClick={handleCerrar} className="w-full h-14 text-base" size="lg">
+              <Button onClick={handleCerrar} className="w-full h-14 text-base" size="lg" disabled={cargando}>
                 <Lock className="w-5 h-5 mr-2" />
                 CERRAR CAJA
               </Button>
@@ -367,6 +406,7 @@ export default function CierreCaja() {
                 variant="outline"
                 className="w-full h-14 text-base border-warning text-warning hover:bg-warning/10"
                 size="lg"
+                disabled={cargando}
               >
                 <Unlock className="w-5 h-5 mr-2" />
                 Reabrir Caja
@@ -413,16 +453,16 @@ export default function CierreCaja() {
                     </span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>Apertura: {formatHora(c.horaApertura)}</span>
-                    <span>Cierre: {formatHora(c.horaCierre)}</span>
-                    <span>Ventas: {c.cantidadVentas ?? 0}</span>
-                    <span>Efectivo: {formatCurrency(c.totalEfectivo ?? 0)}</span>
-                    <span>Transf.: {formatCurrency(c.totalTransferencia ?? 0)}</span>
-                    <span>Otros: {formatCurrency(c.totalOtros ?? 0)}</span>
+                    <span>Apertura: {formatHora(c.hora_apertura)}</span>
+                    <span>Cierre: {formatHora(c.hora_cierre)}</span>
+                    <span>Ventas: {c.cantidad_ventas ?? 0}</span>
+                    <span>Efectivo: {formatCurrency(c.total_efectivo ?? 0)}</span>
+                    <span>Transf.: {formatCurrency(c.total_transferencia ?? 0)}</span>
+                    <span>Otros: {formatCurrency(c.total_otros ?? 0)}</span>
                   </div>
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-sm font-semibold">
-                      Total: {formatCurrency(c.totalVendido ?? 0)}
+                      Total: {formatCurrency(c.total_vendido ?? 0)}
                     </span>
                     <Button variant="ghost" size="sm" onClick={() => descargarCSV(c)}>
                       <Download className="w-4 h-4 mr-1" />
