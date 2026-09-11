@@ -32,51 +32,9 @@ export async function fetchMovimientosCajaDia(
 
   if (error) throw error;
 
-  if (!movimientos || movimientos.length === 0) {
-    return [];
-  }
-
-  const resultado = await Promise.all(
-    movimientos.map(async (movimiento) => {
-      if (movimiento.origen === 'venta') {
-        const { data: venta, error: ventaError } = await supabase
-          .from('ventas')
-          .select('forma_pago')
-          .eq('id', movimiento.ref_id)
-          .single();
-
-        if (ventaError) throw ventaError;
-
-        return {
-          ...movimiento,
-          forma_pago: venta?.forma_pago ?? null,
-        };
-      }
-
-      if (movimiento.origen === 'gasto') {
-        const { data: gasto, error: gastoError } = await supabase
-          .from('gastos')
-          .select('forma_pago')
-          .eq('id', movimiento.ref_id)
-          .single();
-
-        if (gastoError) throw gastoError;
-
-        return {
-          ...movimiento,
-          forma_pago: gasto?.forma_pago ?? null,
-        };
-      }
-
-      return {
-        ...movimiento,
-        forma_pago: null,
-      };
-    })
-  );
-
-  return resultado;
+  return movimientos ?? [];
 }
+
 export async function fetchVentasPendientesDia(
   negocioId: string,
   fechaKey: string
@@ -89,6 +47,7 @@ export async function fetchVentasPendientesDia(
     .eq('estado_pago', 'pendiente');
 
   if (error) throw error;
+
   return data || [];
 }
 
@@ -124,48 +83,5 @@ export async function fetchMovimientosCajaMes(
 
   if (error) throw error;
 
-  if (!movimientos || movimientos.length === 0) {
-    return [];
-  }
-
-  const resultado = await Promise.all(
-    movimientos.map(async (movimiento) => {
-      if (movimiento.origen === 'venta') {
-        const { data: venta, error: ventaError } = await supabase
-          .from('ventas')
-          .select('forma_pago')
-          .eq('id', movimiento.ref_id)
-          .single();
-
-        if (ventaError) throw ventaError;
-
-        return {
-          ...movimiento,
-          forma_pago: venta?.forma_pago ?? null,
-        };
-      }
-
-      if (movimiento.origen === 'gasto') {
-        const { data: gasto, error: gastoError } = await supabase
-          .from('gastos')
-          .select('forma_pago')
-          .eq('id', movimiento.ref_id)
-          .single();
-
-        if (gastoError) throw gastoError;
-
-        return {
-          ...movimiento,
-          forma_pago: gasto?.forma_pago ?? null,
-        };
-      }
-
-      return {
-        ...movimiento,
-        forma_pago: null,
-      };
-    })
-  );
-
-  return resultado;
+  return movimientos ?? [];
 }

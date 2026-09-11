@@ -13,6 +13,7 @@ import * as sheetsApi from '@/lib/api/googleSheets';
 import * as clientesApi from '@/lib/api/clientes';
 import * as pedidosApi from '@/lib/api/pedidos';
 import * as productosApi from '@/lib/api/productos';
+import * as gastosApi from '@/lib/api/gastos';
 
 
 interface AppState {
@@ -57,7 +58,7 @@ interface AppState {
   // Actions - Gastos
   addGasto: (gasto: Omit<Gasto, 'id'>) => void;
   updateGasto: (id: string, gasto: Partial<Gasto>) => void;
-  deleteGasto: (id: string) => void;
+  deleteGasto: (id: string) => Promise<void>;
 
   // Actions - Caja
   cerrarCaja: (fecha: string, saldoInicial: number) => void;
@@ -344,16 +345,16 @@ export const useStore = create<AppState>()(
         sheetsApi.updateGasto(id, gastoData).catch(console.error);
       },
 
-      deleteGasto: (id) => {
-        set((state) => ({
-          gastos: state.gastos.filter((g) => g.id !== id),
-          movimientos: state.movimientos.filter(
-            (m) => !(m.origen === 'gasto' && m.refId === id)
-          ),
-        }));
+      deleteGasto: async (id) => {
+        await gastosApi.eliminarGasto(id);
 
-        sheetsApi.deleteGasto(id).catch(console.error);
-      },
+      set((state) => ({
+        gastos: state.gastos.filter((g) => g.id !== id),
+        movimientos: state.movimientos.filter(
+        (m) => !(m.origen === 'gasto' && m.refId === id)
+    ),
+  }));
+},
 
       // Caja
       cerrarCaja: (fecha, saldoInicial) => {
