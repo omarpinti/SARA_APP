@@ -129,21 +129,13 @@ export async function fetchVentasCompletas(negocioId: string) {
     .from('ventas')
     .select(`
       *,
-      producto:productos (
-        id,
-        nombre
-      ),
       venta_detalle (
         id,
         producto_id,
         promocion_id,
         cantidad,
         precio_unitario,
-        subtotal,
-        producto:productos (
-          id,
-          nombre
-        )
+        subtotal
       )
     `)
     .eq('negocio_id', negocioId)
