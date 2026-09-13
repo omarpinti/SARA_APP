@@ -82,7 +82,7 @@ const emptyForm = {
 
 export default function Ventas() {
   const { negocioId } = useAuth();
-  const { clientes, ventas, addVenta, updateVenta, deleteVenta, isCajaCerrada } = useStore();
+  const { clientes, ventas, addVenta, isCajaCerrada } = useStore();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [clienteOpen, setClienteOpen] = useState(false);

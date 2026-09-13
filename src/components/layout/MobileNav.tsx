@@ -7,7 +7,9 @@ import {
   Receipt, 
   Wallet,
   Lock,
-  BarChart3
+  BarChart3,
+  Package,
+  Tag
 } from 'lucide-react';
 
 const navigation = [
@@ -19,6 +21,8 @@ const navigation = [
   { name: 'Caja', href: '/caja', icon: Wallet },
   { name: 'Cierre', href: '/cierre', icon: Lock },
   { name: 'Stats', href: '/estadisticas', icon: BarChart3 },
+  { name: 'Productos', href: '/administracion/productos', icon: Package },
+  { name: 'Promos', href: '/administracion/promociones', icon: Tag },
 ];
 
 export function MobileNav() {

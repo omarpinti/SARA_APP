@@ -9,7 +9,9 @@ import {
   Lock,
   BarChart3,
   Droplets,
-  LogOut
+  LogOut,
+  Package,
+  Tag
 } from 'lucide-react';
 import { SyncStatus } from '@/components/SyncStatus';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +25,8 @@ const navigation = [
   { name: 'Caja del Día', href: '/caja', icon: Wallet },
   { name: 'Cierre de Caja', href: '/cierre', icon: Lock },
   { name: 'Estadísticas', href: '/estadisticas', icon: BarChart3 },
+  { name: 'Productos', href: '/administracion/productos', icon: Package },
+  { name: 'Promociones', href: '/administracion/promociones', icon: Tag },
 ];
 
 export function Sidebar() {

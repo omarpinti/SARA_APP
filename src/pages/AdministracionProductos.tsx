@@ -13,8 +13,16 @@ export default function AdministracionProductos() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [nuevoNombre, setNuevoNombre] = useState('');
-  const [nuevoTipo, setNuevoTipo] = useState('');
+  const [nuevoTipo, setNuevoTipo] = useState('bidon_10');
+  const [nuevoFormato, setNuevoFormato] = useState<'pico' | 'dispenser' | ''>('');
  const [nuevoPrecio, setNuevoPrecio] = useState(0);
+
+const TIPOS_VALIDOS = [
+  { value: 'bidon_6', label: 'Bidón 6 Litros' },
+  { value: 'bidon_10', label: 'Bidón 10 Litros' },
+  { value: 'bidon_20', label: 'Bidón 20 Litros' },
+  { value: 'pack', label: 'Pack' },
+];
 
 async function cambiarPrecio(producto: Producto, nuevoPrecio: number) {
   try {
@@ -59,8 +67,12 @@ async function agregarProducto() {
     return;
   }
 
-  if (!nuevoNombre.trim() || !nuevoTipo.trim()) {
-    setError('Completá nombre y tipo.');
+  if (!nuevoNombre.trim()) {
+    setError('Completá el nombre del producto.');
+    return;
+  }
+  if (!nuevoTipo) {
+    setError('Elegí el tipo de producto.');
     return;
   }
 
@@ -68,7 +80,8 @@ async function agregarProducto() {
     const creado = await createProducto(
       {
         nombre: nuevoNombre.trim(),
-        tipo: nuevoTipo.trim().toLowerCase(),
+        tipo: nuevoTipo,
+        formato: nuevoFormato || undefined,
         precioDefault: nuevoPrecio,
         activo: true,
         requiereEnvase: false,
@@ -82,7 +95,8 @@ async function agregarProducto() {
     setProductos((actuales) => [...actuales, creado]);
 
     setNuevoNombre('');
-    setNuevoTipo('');
+    setNuevoTipo('bidon_10');
+    setNuevoFormato('');
     setNuevoPrecio(0);
     setError('');
   } catch (err) {
@@ -118,7 +132,7 @@ async function agregarProducto() {
     Agregar producto
   </h2>
 
-  <div className="grid gap-3 md:grid-cols-4">
+  <div className="grid gap-3 md:grid-cols-5">
     <input
       type="text"
       placeholder="Nombre"
@@ -127,13 +141,25 @@ async function agregarProducto() {
       className="rounded-md border px-3 py-2"
     />
 
-    <input
-      type="text"
-      placeholder="Tipo"
+    <select
       value={nuevoTipo}
       onChange={(e) => setNuevoTipo(e.target.value)}
       className="rounded-md border px-3 py-2"
-    />
+    >
+      {TIPOS_VALIDOS.map((t) => (
+        <option key={t.value} value={t.value}>{t.label}</option>
+      ))}
+    </select>
+
+    <select
+      value={nuevoFormato}
+      onChange={(e) => setNuevoFormato(e.target.value as 'pico' | 'dispenser' | '')}
+      className="rounded-md border px-3 py-2"
+    >
+      <option value="">Sin formato (ej: Pack)</option>
+      <option value="pico">Pico / Canilla</option>
+      <option value="dispenser">Dispenser</option>
+    </select>
 
     <input
       type="number"
@@ -177,6 +203,7 @@ async function agregarProducto() {
 
               <div className="text-sm text-muted-foreground">
                 Tipo: {producto.tipo}
+                {producto.formato && ` · Formato: ${producto.formato === 'pico' ? 'Pico / Canilla' : 'Dispenser'}`}
               </div>
 
               <div className="mt-3 flex items-center gap-2">

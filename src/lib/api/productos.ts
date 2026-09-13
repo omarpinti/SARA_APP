@@ -45,6 +45,7 @@ export async function createProducto(
       negocio_id: negocioId,
       nombre: producto.nombre,
       tipo: producto.tipo,
+      formato: producto.formato ?? null,
       precio_default: producto.precioDefault ?? 0,
       activo: producto.activo ?? true,
       requiere_envase: producto.requiereEnvase ?? false,
@@ -68,6 +69,7 @@ export async function updateProducto(
 
   if (producto.nombre !== undefined) payload.nombre = producto.nombre;
   if (producto.tipo !== undefined) payload.tipo = producto.tipo;
+  if (producto.formato !== undefined) payload.formato = producto.formato;
   if (producto.precioDefault !== undefined) payload.precio_default = producto.precioDefault;
   if (producto.activo !== undefined) payload.activo = producto.activo;
   if (producto.requiereEnvase !== undefined) payload.requiere_envase = producto.requiereEnvase;
