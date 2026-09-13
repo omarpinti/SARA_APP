@@ -25,3 +25,4 @@ dist-ssr
 s u p a b a s e / . t e m p / supabase/
 .env 
  
+supabase/.temp/

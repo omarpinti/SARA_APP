@@ -14,7 +14,7 @@ export interface Producto {
   id: string;
   nombre: string;
   tipo: string;
-  formato?: 'pico' | 'dispenser';
+  formato?: string;
   precioDefault: number;
   activo: boolean;
   requiereEnvase: boolean;

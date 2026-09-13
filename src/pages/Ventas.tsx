@@ -672,60 +672,7 @@ const resetForm = () => {
   + Agregar
 </Button>
   </div>
-
-  <div className="space-y-2">
-    <Label>Cantidad</Label>
-
-    <Input
-      type="number"
-      min={1}
-      value={formData.cantidad}
-      onChange={(e) => {
-        const cantidad = Math.max(
-          1,
-          parseInt(e.target.value) || 1
-        );
-
-        if (formData.promocionId) {
-          const detalle =
-            detallesPromociones[formData.promocionId]?.[0];
-
-          setFormData({
-            ...formData,
-            cantidad,
-            precio:
-              (detalle?.precioPromocional ?? 0) * cantidad,
-          });
-
-          return;
-        }
-
-        const producto = productos.find(
-          (p) => p.id === formData.productoId
-        );
-
-        setFormData({
-          ...formData,
-          cantidad,
-          precio:
-            (producto?.precioDefault ?? 0) * cantidad,
-        });
-      }}
-      className="h-12 text-base"
-    />
   </div>
-
-  <div className="space-y-2">
-    <Label>Precio *</Label>
-
-    <Input
-      type="number"
-      value={formData.precio}
-      readOnly
-      className="h-12 text-base font-semibold bg-muted"
-    />
-  </div>
-</div>
                   <DatePickerField
                 date={formData.fechaPago}
                 onDateChange={(d) => setFormData({ ...formData, fechaPago: d })}
